@@ -5,6 +5,7 @@ using System.Text;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
 using RpgApi.Data;
 using RpgApi.Models;
 
@@ -131,15 +132,15 @@ namespace RpgApi.Controllers
                 List<Personagem> personagens = await _context.Personagens
                 .Include(p => p.Arma)
                 .Include(p => p.PersonagemHabilidades).ThenInclude(ph => ph.Habilidade)
-                .Where(p => d.ListIdPersonagens.Contains(p.Id)).ToListAsync();
+                .Where(p => d.ListaIdPersonagens.Contains(p.Id)).ToListAsync();
 
-                int qtdPersonagensVivos = personagens.FinAll(p => p.PontosVida > 0).Count;
+                int qtdPersonagensVivos = personagens.FindAll(p => p.PontosVida > 0).Count;
 
                 while (qtdPersonagensVivos > 1)
                 {
                     // Selecione personagens com pontos de vida positivo e depois faz sorteio.
                     List<Personagem> atacante = personagens.Where(p => p.PontosVida > 0 ).ToList();
-                    Personagem atacante = atacante[new Random().Next(atacantes.Count)];
+                    Personagem atacante = atacantes[new Random().Next(atacantes.Count)];
                     d.AtacanteId = atacante.Id;
 
                     //Seleciona personagens com pontos de vida positivos, exceto o atacante escolhido e depois faz sorteio
@@ -169,7 +170,7 @@ namespace RpgApi.Controllers
 
                         //Formata a mensagem
                         resultado =
-                            string.Format{"{0} atacou {1} usando {2} com o dano {3} ", atacante.Nome, oponente.Nome,ataqueUsado, dano};
+                            string.Format("{0} atacou {1} usando {2} com o dano {3} ", atacante.Nome, oponente.Nome, ataqueUsado, dano);
                         d.Narracao += resultado; //Concatena o resultado com as narrações existentes.
                         d.Resultados.Add(resultado); //Adicionar o resultado atual na lista de resultados.
 
@@ -178,11 +179,57 @@ namespace RpgApi.Controllers
                     {
                         //Programação do ataque com habilidade.
 
-                        //Realiza o sorteio entre as habilidades ************************************************************************************************************************
+                        //Realiza o sorteio entre as habilidades existentes e na linha seguinte a seleciona.
+                        int sorteioHabilidadeId = new Random().Next(atacante.PersonagemHabilidades.Count);
+                        Habilidade habilidadeEscolhida = atacante.PersonagemHabilidades[sorteioHabilidadeId].Habilidade;
+                        ataqueUsado = habilidadeEscolhida.Nome;
+
+                        // Sorteio da inteligencia somada ao dano
+                        dano = habilidadeEscolhida.Dano + (new Random().Next(atacante.Inteligencia));
+                        dano = dano - new Random().Next(oponente.Defesa); //Soreio da defesa.
+
+                        if(dano >0)
+                            oponente.PontosVida = oponente.PontosVida - (int)dano;
+
+                        resultado =
+                            string.Format("{0} atacou {1} usando {2} com o dano {3}.", atacante.Nome, oponente.Nome, ataqueUsado, dano);
+                        d.Narracao += resultado;
+                        d.Resultados.Add(resultado);
                     }
-                }
 
+                    // Atenção aqui ficará a programação da verificação do ataque usado e verificar se existe mais de um personagem vivo
+                    if(!string.IsNullOrEmpty(ataqueUsado)) // ataque usado teve resultado (não existira caso personagem não tenha arma).
+                    {
+                        // Incrementa os dados dos combates
+                        atacante.Vitorias++;
+                        oponente.Derrotas++;
+                        atacante.Disputas++;
+                        oponente.Disputas++;
 
+                        // Prepaação para salvar os dados das disputas no BD.
+                        d.Id = 0; // Zera o Id para salvar os dados de disputas sem erro de chave.
+                        d.DataDisputa = DateTime.Now;
+                        _context.Disputas.Add(d);
+                        await _context.SaveChangesAsync();
+                    }
+
+                    //Contagem dos personagens que ainda tem pontuação de vida positova .
+                    qtdPersonagensVivos = personagens.FindAll(p => p.PontosVida >0).Count;
+
+                    // Caso apenas um personagem se enquadre nesta situação, quer dizer que ele será o campeão.
+                    if (qtdPersonagensVivos == 1) // Havendo só um personagem vivo, existe um CAMPEÃO!
+                    {
+                        string resultadoFinal =
+                            $"{atacante.Nome.ToUpper()} é CAMPEÃO com {atacante.PontosVida} pontos de vida restantes!";
+
+                        d.Narracao += resultadoFinal; //Concatena o resultado final com as demais narrações.
+                        d.Resultados.Add(resultadoFinal); // Concatena o resultado final com os demais resultados.
+
+                        break; // break vai parar o while.
+                    }
+                }// Fim do While
+                // Código após o fechamento do while. Atualizará os pontos de vida,
+                // disputas, vitórias e derrotas de todos os personagns ao final das batalhas
                 _context.Personagens.UpdateRange(personagens);
                 await _context.SaveChangesAsync();
 
@@ -194,6 +241,80 @@ namespace RpgApi.Controllers
             }
          }   
 
+         [HttpDelete("ApagarDisputas")]
+        public async Task<IActionResult> DeleteAsync()
+        {
+            try
+            {
+                List<Disputa> disputas = await _context.TB_DISPUTAS.ToListAsync();
 
+                _context.TB_DISPUTAS.RemoveRange(disputas);
+                await _context.SaveChangesAsync();
+
+                return Ok("Disputas apagadas");
+            }
+            catch (System.Exception ex)
+            {                return BadRequest(ex.Message); }
+        }
+
+        [HttpGet("Listar")]
+        public async Task<IActionResult> ListarAsync()
+        {
+            try
+            {
+                List<Disputa> disputas =
+                    await _context.TB_DISPUTAS.ToListAsync();
+
+                return Ok(disputas);
+            }
+            catch (System.Exception ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+
+        [HttpPut("RestaurarPontosVida")]
+        public async Task<IActionResult> RestaurarPontosVidaAsync(Personagem p)
+        {
+            try
+            {
+                int linhasAfetadas = 0;
+                Personagem? pEncontrado =
+
+                await _context.Personagens.FirstOrDefaultAsync(pBusca => pBusca.Id == p.Id);
+                pEncontrado.PontosVida = 100;
+                
+                bool atualizou = await TryUpdateModelAsync<Personagem>(pEncontrado, "p",
+                    pAtualizar => pAtualizar.PontosVida);
+
+                // EF vai detectar e atualizar apenas as colunas que foram alteradas.
+                if (atualizou)
+                    linhasAfetadas = await _context.SaveChangesAsync();
+
+                return Ok(linhasAfetadas);
+            }
+            catch (System.Exception ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+
+        //Método para alteração da foto
+        [HttpPut("AtualizarFoto")]
+        public async Task<IActionResult> AtualizarFotoAsync(Personagem p)
+        {
+            try
+            {
+                Personagem personagem = await _context.TB_PERSONAGENS
+                    .FirstOrDefaultAsync(x => x.Id == p.Id);
+                personagem.FotoPersonagem = p.FotoPersonagem;
+                var attach = _context.Attach(personagem);
+                attach.Property(x => x.Id).IsModified = false;
+                attach.Property(x => x.FotoPersonagem).IsModified = true;
+                int linhasAfetadas = await _context.SaveChangesAsync();
+                return Ok(linhasAfetadas);
+            }
+            catch (System.Exception ex)
+            { return BadRequest(ex.Message);}}
     }
 }
