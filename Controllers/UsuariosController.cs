@@ -7,7 +7,12 @@ using Microsoft.EntityFrameworkCore;
 using RpgApi.Data;
 using RpgApi.Models;
 using RpgApi.Utils;
-
+/*using System.Security.Claims;
+using Microsoft.IdentityModel.Tokens;
+using System.Text;
+using System.IdentityModel.Tokens.Jwt;
+using Microsoft.AspNetCore.Authorization;
+*/
 namespace RpgApi.Controllers
 {
     [ApiController]
@@ -15,10 +20,12 @@ namespace RpgApi.Controllers
     public class UsuariosController : ControllerBase
     {
         private readonly DataContext _context;
+        private readonly IConfiguration _configuration;
 
-        public UsuariosController(DataContext context)
+        public UsuariosController(DataContext context, IConfiguration configuration)
         {
             _context = context;
+            _configuration = configuration;
         }
 
         private async Task<bool> UsuarioExistente(string username)
@@ -29,6 +36,29 @@ namespace RpgApi.Controllers
             }
             return false;
         }
+
+/*             private string CriarToken(Usuario usuario)
+        {
+            List<Claim> claims = new List<Claim>
+            {
+                new Claim(ClaimTypes.NameIdentifier, usuario.Id.ToString()),
+                new Claim(ClaimTypes.Name, usuario.Username),
+                new Claim(ClaimTypes.Role, usuario.Perfil)
+            };
+            SymmetricSecurityKey key = new SymmetricSecurityKey(Encoding.UTF8
+            .GetBytes(_configuration.GetSection("ConfiguracaoToken:Chave").Value));
+            SigningCredentials creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha512Signature);
+            SecurityTokenDescriptor tokenDescriptor = new SecurityTokenDescriptor
+            {
+                Subject = new ClaimsIdentity(claims),
+                Expires = DateTime.Now.AddDays(1),
+                SigningCredentials = creds
+            };
+            JwtSecurityTokenHandler tokenHandler = new JwtSecurityTokenHandler();
+            SecurityToken token = tokenHandler.CreateToken(tokenDescriptor);
+            return tokenHandler.WriteToken(token);
+        }
+*/
 
         [HttpPost("Registrar")]
         public async Task<IActionResult> RegistrarUsuario(Usuario user)
@@ -75,6 +105,11 @@ namespace RpgApi.Controllers
                      usuario.DataAcesso = DateTime.Now;
                     _context.TB_USUARIOS.Update(usuario);
                     await _context.SaveChangesAsync();
+
+/*                    usuario.PasswordHash = null;
+                    usuario.PasswordSalt = null;
+                    usuario.Token = CriarToken(usuario);
+*/
 
                     return Ok(usuario);
                 }
@@ -138,7 +173,7 @@ namespace RpgApi.Controllers
             }
             catch (System.Exception ex)
             {
-                return BadRequest(ex.Message);
+                return BadRequest(ex.Message + " - " + ex.InnerException);
             }
         }
 
@@ -149,14 +184,14 @@ namespace RpgApi.Controllers
             {
                 //List exigirá o using System.Collections.Generic
                 Usuario usuario = await _context.TB_USUARIOS //Busca o usuário no banco através do login
-                    .FirstOrDefaultAsync(x => x.Username.ToLower() == login.ToLower());
+                   .FirstOrDefaultAsync(x => x.Username.ToLower() == login.ToLower());
 
 
                 return Ok(usuario);
             }
             catch (System.Exception ex)
             {
-                return BadRequest(ex.Message);
+                return BadRequest(ex.Message + " - " + ex.InnerException);
             }
         }
 
@@ -182,7 +217,7 @@ namespace RpgApi.Controllers
             }
             catch (System.Exception ex)
             {
-                return BadRequest(ex.Message);
+                return BadRequest(ex.Message + " - " + ex.InnerException);
             }
         }
 
@@ -205,7 +240,7 @@ namespace RpgApi.Controllers
             }
             catch (System.Exception ex)
             {
-                return BadRequest(ex.Message);
+                return BadRequest(ex.Message + " - " + ex.InnerException);
             }
         }
 
@@ -230,12 +265,10 @@ namespace RpgApi.Controllers
             }
             catch (System.Exception ex)
             {
-                return BadRequest(ex.Message);
+                return BadRequest(ex.Message + " - " + ex.InnerException);
             }
         }
 
         
-
-
     }
 }

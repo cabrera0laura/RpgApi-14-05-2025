@@ -13,6 +13,5 @@ namespace RpgApi.Models
         public Personagem? Personagem { get; set; } = null!; //null! --> ignora os warnings
         public int? PersonagemId { get; set; }
 
-
     }
 }

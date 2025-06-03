@@ -129,7 +129,7 @@ namespace RpgApi.Controllers
                 d.Resultados = new List<string>(); //Instancia a lista de resultados
 
                 //Busca na base de dados dos personagens informados no parametro incluindo Armas e habilidades
-                List<Personagem> personagens = await _context.Personagens
+                List<Personagem> personagens = await _context.TB_PERSONAGENS
                 .Include(p => p.Arma)
                 .Include(p => p.PersonagemHabilidades).ThenInclude(ph => ph.Habilidade)
                 .Where(p => d.ListaIdPersonagens.Contains(p.Id)).ToListAsync();
@@ -139,7 +139,7 @@ namespace RpgApi.Controllers
                 while (qtdPersonagensVivos > 1)
                 {
                     // Selecione personagens com pontos de vida positivo e depois faz sorteio.
-                    List<Personagem> atacante = personagens.Where(p => p.PontosVida > 0 ).ToList();
+                    List<Personagem> atacantes = personagens.Where(p => p.PontosVida > 0 ).ToList();
                     Personagem atacante = atacantes[new Random().Next(atacantes.Count)];
                     d.AtacanteId = atacante.Id;
 
@@ -209,7 +209,7 @@ namespace RpgApi.Controllers
                         // Prepaação para salvar os dados das disputas no BD.
                         d.Id = 0; // Zera o Id para salvar os dados de disputas sem erro de chave.
                         d.DataDisputa = DateTime.Now;
-                        _context.Disputas.Add(d);
+                        _context.TB_DISPUTAS.Add(d);
                         await _context.SaveChangesAsync();
                     }
 
@@ -230,14 +230,14 @@ namespace RpgApi.Controllers
                 }// Fim do While
                 // Código após o fechamento do while. Atualizará os pontos de vida,
                 // disputas, vitórias e derrotas de todos os personagns ao final das batalhas
-                _context.Personagens.UpdateRange(personagens);
+                _context.TB_PERSONAGENS.UpdateRange(personagens);
                 await _context.SaveChangesAsync();
 
-                return ok(d); //retorna os dados de disputas
+                return Ok(d); //retorna os dados de disputas
             }
             catch(System.Exception ex)
             {
-                return BadRequest(ex.Message);
+                return BadRequest(ex.Message + " - " + ex.InnerException);
             }
          }   
 
@@ -254,7 +254,8 @@ namespace RpgApi.Controllers
                 return Ok("Disputas apagadas");
             }
             catch (System.Exception ex)
-            {                return BadRequest(ex.Message); }
+            {
+                return BadRequest(ex.Message + " - " + ex.InnerException); }
         }
 
         [HttpGet("Listar")]
@@ -269,52 +270,8 @@ namespace RpgApi.Controllers
             }
             catch (System.Exception ex)
             {
-                return BadRequest(ex.Message);
+                return BadRequest(ex.Message + " - " + ex.InnerException);
             }
         }
-
-        [HttpPut("RestaurarPontosVida")]
-        public async Task<IActionResult> RestaurarPontosVidaAsync(Personagem p)
-        {
-            try
-            {
-                int linhasAfetadas = 0;
-                Personagem? pEncontrado =
-
-                await _context.Personagens.FirstOrDefaultAsync(pBusca => pBusca.Id == p.Id);
-                pEncontrado.PontosVida = 100;
-                
-                bool atualizou = await TryUpdateModelAsync<Personagem>(pEncontrado, "p",
-                    pAtualizar => pAtualizar.PontosVida);
-
-                // EF vai detectar e atualizar apenas as colunas que foram alteradas.
-                if (atualizou)
-                    linhasAfetadas = await _context.SaveChangesAsync();
-
-                return Ok(linhasAfetadas);
-            }
-            catch (System.Exception ex)
-            {
-                return BadRequest(ex.Message);
-            }
-        }
-
-        //Método para alteração da foto
-        [HttpPut("AtualizarFoto")]
-        public async Task<IActionResult> AtualizarFotoAsync(Personagem p)
-        {
-            try
-            {
-                Personagem personagem = await _context.TB_PERSONAGENS
-                    .FirstOrDefaultAsync(x => x.Id == p.Id);
-                personagem.FotoPersonagem = p.FotoPersonagem;
-                var attach = _context.Attach(personagem);
-                attach.Property(x => x.Id).IsModified = false;
-                attach.Property(x => x.FotoPersonagem).IsModified = true;
-                int linhasAfetadas = await _context.SaveChangesAsync();
-                return Ok(linhasAfetadas);
-            }
-            catch (System.Exception ex)
-            { return BadRequest(ex.Message);}}
     }
 }

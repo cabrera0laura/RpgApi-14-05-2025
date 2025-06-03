@@ -70,7 +70,7 @@ namespace RpgApi.Controllers
                 
                 // Se achar, quer dizer que o personagem não pode ter mais que uma arma (relacionamento 1 para 1)
                 if(buscaArma != null)
-                    thorow new Exception("O personagem selecionado já contém uma arma atribuída a ele");
+                    throw new Exception("O personagem selecionado já contém uma arma atribuída a ele");
 
                 await _context.TB_ARMAS.AddAsync(novaArma);
                 await _context.SaveChangesAsync();
